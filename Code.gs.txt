@@ -1,0 +1,110 @@
+var SHEET_ID = "1EahtQeG7OLQoQqpD89BBaceqgBd5-_eRNG6TUP_ut2A";
+var FOLDER_ID = "1CuKowK_MZKaZG8k2Y3fqdbJmNnxNV-NG";
+
+function doGet() {
+  return HtmlService.createTemplateFromFile('index')
+      .evaluate()
+      .setTitle('Audit Report TUV - Professional White')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+function uploadFile(base64Data, fileName) {
+  try {
+    var folder = DriveApp.getFolderById(FOLDER_ID);
+    var splitBase = base64Data.split(',');
+    var type = splitBase[0].split(';')[0].replace('data:', '');
+    var blob = Utilities.newBlob(Utilities.base64Decode(splitBase[1]), type, fileName);
+    var file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return file.getUrl();
+  } catch (e) { return ""; }
+}
+
+function saveAuditData(form) {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Database_TUV");
+    var auditId = "TUV-" + Utilities.formatDate(new Date(), "GMT+7", "yyMMdd-HHmmss");
+    
+    ss.appendRow([
+      new Date(), auditId, form.auditDate, form.plant, form.detail, 
+      form.reportFiles, form.findings, form.dept, form.carDetail, 
+      form.carFiles, form.whyDetail, form.whyFiles, form.carEmail, 
+      form.carDeadline, form.carIntDeadline, form.statusCar, 
+      form.evDeadline, form.evStatus, form.fu1, form.fu2, form.fu3, 
+      form.yokotenDetail, form.yokotenFiles
+    ]);
+    return "✅ save ID: " + auditId + " success!";
+  } catch (e) { throw new Error(e.message); }
+}
+
+function getDashboardData() {
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Database_TUV");
+  var data = sheet.getDataRange().getDisplayValues();
+  
+  var stats = { 
+    total: 0, open: 0, closed: 0, overdue: 0, records: [],
+    findingSummary: {
+      "nc1 (Major NC)": { count: 0, car: "-", ev: "-" },
+      "nc2 (Minor NC) HMM": { count: 0, car: "-", ev: "-" },
+      "nc2 (Minor NC) LPB": { count: 0, car: "-", ev: "-" },
+      "OFI HMM": { count: 0, car: "-", ev: "-" },
+      "OFI LPB": { count: 0, car: "-", ev: "-" },
+      "Comment HMM": { count: 0, car: "-", ev: "-" },
+      "Comment LPB": { count: 0, car: "-", ev: "-" }
+    }
+  };
+  
+  if (data.length <= 1) return stats;
+  
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  
+  for (var i = data.length - 1; i >= 1; i--) { 
+    var row = data[i];
+    if (!row || row.length === 0) continue; 
+    
+    var status = row[15] || "";
+    var deadlineStr = row[13] || "";
+    var findingsStr = row[6] || ""; // คอลัมน์ Finding
+    
+    // นับประเภท Finding และเก็บ Deadline ล่าสุด (เนื่องจากวนลูปจากล่างขึ้นบน)
+    for (var key in stats.findingSummary) {
+      if (findingsStr.indexOf(key) !== -1) {
+        stats.findingSummary[key].count++;
+        // ถ้ายังไม่มีวันเวลาที่บันทึกไว้ ให้ใช้อันล่าสุดที่เจอ
+        if (stats.findingSummary[key].car === "-") {
+          stats.findingSummary[key].car = row[13] || "-";
+          stats.findingSummary[key].ev = row[16] || "-";
+        }
+      }
+    }
+    
+    var findingItems = findingsStr ? findingsStr.split(',').length : 0;
+    stats.total += findingItems;
+    
+    if (status === "Open") {
+      stats.open++;
+      if (deadlineStr) {
+        var deadlineDate = new Date(deadlineStr);
+        if(deadlineDate < today) stats.overdue++;
+      }
+    } else if (status === "Close") {
+      stats.closed++;
+    }
+    
+    stats.records.push({
+      date: row[2] || "", plant: row[3] || "", findings: row[6] || "", 
+      dept: row[7] || "", carDetail: row[8] || "", carFiles: row[9] || "",
+      whyDetail: row[10] || "", whyFiles: row[11] || "", carEmail: row[12] || "",
+      carDeadline: row[13] || "", carIntDeadline: row[14] || "",
+      statusCar: row[15] || "", evDeadline: row[16] || "",
+      fu1: row[18] || "", fu2: row[19] || "", fu3: row[20] || "",
+      yokotenDetail: row[21] || "", yokotenFiles: row[22] || ""
+    });
+  }
+  return stats;
+}
