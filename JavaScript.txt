@@ -63,15 +63,25 @@
     }
 
     function loadSharedReport() {
+        const yearSelect = document.getElementById('yearFilter');
+        let selectedYear = yearSelect ? yearSelect.value : new Date().getFullYear().toString();
+        
         google.script.run.withSuccessHandler(content => {
             const editor = tinymce.get('sharedReportEditor');
-            if (content && editor) editor.setContent(content);
-        }).getSharedReport();
+            if (editor) editor.setContent(content || "");
+        }).getSharedReport(selectedYear); // ส่งปีที่เลือกไปหลังบ้าน
     }
+
 
     function saveSharedReport() {
         const editor = tinymce.get('sharedReportEditor');
         if (!editor) return; 
+        
+        const yearSelect = document.getElementById('yearFilter');
+        let selectedYear = yearSelect ? yearSelect.value : new Date().getFullYear().toString();
+        if (selectedYear === "All") {
+            selectedYear = new Date().getFullYear().toString(); // ถ้าเลือก All จะบันทึกเป็นปีปัจจุบัน
+        }
         
         const content = editor.getContent();
         const btn = document.getElementById('btnSaveReport');
@@ -81,12 +91,13 @@
         btn.disabled = true;
 
         google.script.run.withSuccessHandler(() => {
-            alert('✅ Report details saved successfully!');
+            alert('✅ Report details saved for year ' + selectedYear + ' successfully!');
             btn.innerHTML = originalText;
             btn.disabled = false;
             setEditorMode('view');
-        }).saveSharedReport(content);
+        }).saveSharedReport(content, selectedYear); // ส่งปีไปคู่กับข้อมูล
     }
+
 
     async function uploadDirectToDoc(input) {
         const files = input.files;
@@ -181,7 +192,7 @@
                 carFiles: carUrl,
                 whyDetail: document.getElementById('whyDetail').value,
                 whyFiles: whyUrl,
-                createdBy: document.getElementById('createdBy').value,
+                carEmail: document.getElementById('carEmail').value,
                 carDeadline: document.getElementById('carDeadline').value,
                 carIntDeadline: document.getElementById('carIntDeadline').value,
                 statusCar: document.getElementById('statusCar').value,
@@ -231,6 +242,9 @@
     function loadDashboardData() {
         const selectedYear = document.getElementById('yearFilter') ? document.getElementById('yearFilter').value : "All";
         
+        // 🌟 สั่งให้ดึง Doc Report ของปีนั้นๆ มาแสดงด้วยทันที
+        loadSharedReport(); 
+        
         google.script.run.withSuccessHandler(data => {
             currentIsAdmin = data.isAdmin; 
             
@@ -266,7 +280,8 @@
                 for (let key in raw) r[key] = (raw[key] === undefined || raw[key] === null || raw[key] === "undefined" || raw[key] === "") ? "" : raw[key];
 
                 let actionBtn = '';
-                if (data.isAdmin || data.currentUserEmail === r.createdBy) {
+                // 🌟 อัปเดตสิทธิ์: Admin, คนสร้าง (Auditor), และ คนรับผิดชอบ (Auditee) สามารถกด Edit ได้
+                if (data.isAdmin || data.currentUserEmail === r.createdBy || data.currentUserEmail === r.carEmail) {
                     let recordJson = encodeURIComponent(JSON.stringify(raw));
                     actionBtn = `<button class="btn btn-sm btn-primary shadow-sm" onclick="editRecord('${recordJson}')"><i class="bi bi-pencil-square"></i> Edit</button>`;
                 } else {
@@ -286,7 +301,7 @@
                     <td class="text-center"><span class="badge bg-light text-dark border">${r.dept}</span></td>
                     <td class="small text-wrap" style="min-width: 250px;">${r.carDetail} ${carFileLink}</td>
                     <td class="small text-wrap" style="min-width: 250px;">${r.whyDetail} ${whyFileLink}</td>
-                    <td class="small text-center">${r.createdBy}</td>
+                    <td class="small text-center">${r.carEmail}</td>
                     <td class="text-center">${formatEnglishDate(r.carDeadline)}</td>
                     <td class="text-center">${formatEnglishDate(r.carIntDeadline)}</td>
                     <td class="text-center"><span class="badge ${statusClass}">${r.statusCar}</span></td>
@@ -300,7 +315,6 @@
             tbody.innerHTML = html || '<tr><td colspan="16" class="text-center py-5 text-muted">No records found for this year.</td></tr>';
         }).getDashboardData(selectedYear);
     }
-
     function editRecord(jsonStr) {
         let r = JSON.parse(decodeURIComponent(jsonStr));
         
