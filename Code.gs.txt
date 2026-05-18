@@ -139,7 +139,7 @@ function getDashboardData(selectedYear) {
       id: row[1] || "", 
       date: row[2] || "", plant: row[3] || "", detail: row[4] || "", reportFiles: row[5] || "",
       findings: row[6] || "", dept: row[7] || "", carDetail: row[8] || "", carFiles: row[9] || "",
-      whyDetail: row[10] || "", whyFiles: row[11] || "", createdBy: row[12] || "",
+      whyDetail: row[10] || "", whyFiles: row[11] || "", c: row[12] || "",
       carDeadline: row[13] || "", carIntDeadline: row[14] || "", statusCar: row[15] || "", 
       evDeadline: row[16] || "", evStatus: row[17] || "", fu1: row[18] || "", fu2: row[19] || "", 
       fu3: row[20] || "", yokotenDetail: row[21] || "", yokotenFiles: row[22] || "",
@@ -149,5 +149,50 @@ function getDashboardData(selectedYear) {
   return stats;
 }
 
-function getSharedReport() { var ss = SpreadsheetApp.openById(SHEET_ID); var sheet = ss.getSheetByName("ReportData"); if (!sheet) return ""; return sheet.getRange("A1").getValue(); }
-function saveSharedReport(htmlContent) { var ss = SpreadsheetApp.openById(SHEET_ID); var sheet = ss.getSheetByName("ReportData"); if (!sheet) { sheet = ss.insertSheet("ReportData"); } sheet.getRange("A1").setValue(htmlContent); return true; }
+// 🌟 ฟังก์ชันดึงข้อมูล Shared Report แยกตามปี
+function getSharedReport(year) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("ReportData");
+  if (!sheet) return ""; 
+
+  // ถ้าไม่ได้เลือกปี หรือเลือก All ให้ดึงของปีปัจจุบัน
+  //if (!year || year === "All") year = new Date().getFullYear().toString();
+  
+  var data = sheet.getDataRange().getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][0].toString() === year.toString()) {
+      return data[i][1]; // คืนค่าเนื้อหา HTML ของปีนั้น
+    }
+  }
+  return ""; // ถ้ายังไม่มีข้อมูลของปีนั้น ให้คืนค่าช่องว่าง
+}
+
+// 🌟 ฟังก์ชันบันทึก Shared Report แยกตามปี
+function saveSharedReport(htmlContent, year) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("ReportData");
+  
+  if (!sheet) {
+    sheet = ss.insertSheet("ReportData");
+  }
+
+  if (!year || year === "All") year = new Date().getFullYear().toString();
+  
+  var data = sheet.getDataRange().getValues();
+  var found = false;
+  
+  // วนลูปหาว่าปีนี้มีบันทึกไว้หรือยัง
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][0].toString() === year.toString()) {
+      sheet.getRange(i + 1, 2).setValue(htmlContent); // ถ้าเจอ อัปเดตทับ
+      found = true;
+      break;
+    }
+  }
+  
+  // ถ้าหาไม่เจอ แปลว่าเป็นปีใหม่ ให้เพิ่มแถวใหม่
+  if (!found) {
+    sheet.appendRow([year, htmlContent]);
+  }
+  return true;
+}
