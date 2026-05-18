@@ -26,40 +26,78 @@ function uploadFile(base64Data, fileName) {
 
 function saveAuditData(form) {
   try {
+    var email = Session.getActiveUser().getEmail(); 
+    var year = form.auditDate ? form.auditDate.substring(0, 4) : new Date().getFullYear(); 
     var ss = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Database_TUV");
-    var auditId = "TUV-" + Utilities.formatDate(new Date(), "GMT+7", "yyMMdd-HHmmss");
-    
-    ss.appendRow([
-      new Date(), auditId, form.auditDate, form.plant, form.detail, 
-      form.reportFiles, form.findings, form.dept, form.carDetail, 
-      form.carFiles, form.whyDetail, form.whyFiles, form.carEmail, 
-      form.carDeadline, form.carIntDeadline, form.statusCar, 
-      form.evDeadline, form.evStatus, form.fu1, form.fu2, form.fu3, 
-      form.yokotenDetail, form.yokotenFiles
-    ]);
-    return "✅ save ID: " + auditId + " success!";
+
+    if (form.hiddenAuditId) {
+      var data = ss.getDataRange().getValues();
+      var rowIndex = -1;
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][1] === form.hiddenAuditId) { rowIndex = i + 1; break; }
+      }
+      
+      if (rowIndex > -1) {
+        var oldRow = data[rowIndex - 1];
+        var rFile = form.reportFiles || oldRow[5];
+        var cFile = form.carFiles || oldRow[9];
+        var wFile = form.whyFiles || oldRow[11];
+        var yFile = form.yokotenFiles || oldRow[22];
+
+        var updateValues = [
+          form.auditDate, form.plant, form.detail, rFile, form.findings, form.dept,
+          form.carDetail, cFile, form.whyDetail, wFile, form.carEmail, form.carDeadline,
+          form.carIntDeadline, form.statusCar, form.evDeadline, form.evStatus,
+          form.fu1, form.fu2, form.fu3, form.yokotenDetail, yFile, year
+        ];
+        ss.getRange(rowIndex, 3, 1, 22).setValues([updateValues]);
+        return "✅ Update ID: " + form.hiddenAuditId + " success!";
+      }
+    } else {
+      var newAuditId = "TUV-" + Utilities.formatDate(new Date(), "GMT+7", "yyMMdd-HHmmss");
+      ss.appendRow([
+        new Date(), newAuditId, form.auditDate, form.plant, form.detail, 
+        form.reportFiles, form.findings, form.dept, form.carDetail, 
+        form.carFiles, form.whyDetail, form.whyFiles, form.carEmail, 
+        form.carDeadline, form.carIntDeadline, form.statusCar, 
+        form.evDeadline, form.evStatus, form.fu1, form.fu2, form.fu3, 
+        form.yokotenDetail, form.yokotenFiles, year, email 
+      ]);
+      return "✅ Save ID: " + newAuditId + " success!";
+    }
   } catch (e) { throw new Error(e.message); }
 }
 
-function getDashboardData() {
-  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Database_TUV");
-  var data = sheet.getDataRange().getDisplayValues();
+function getDashboardData(selectedYear) {
+  var email = Session.getActiveUser().getEmail();
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("Database_TUV");
+  var adminSheet = ss.getSheetByName("AdminList");
   
+  var isAdmin = false;
+  if (adminSheet) {
+    var admins = adminSheet.getRange("A2:A").getValues().flat().filter(String);
+    isAdmin = admins.includes(email);
+  }
+
+  var data = sheet.getDataRange().getDisplayValues();
   var stats = { 
+    currentUserEmail: email, isAdmin: isAdmin, availableYears: [],
     total: 0, open: 0, closed: 0, overdue: 0, records: [],
     findingSummary: {
-      "nc1 (Major NC)": { count: 0, car: "-", ev: "-" },
-      "nc2 (Minor NC) HMM": { count: 0, car: "-", ev: "-" },
-      "nc2 (Minor NC) LPB": { count: 0, car: "-", ev: "-" },
-      "OFI HMM": { count: 0, car: "-", ev: "-" },
-      "OFI LPB": { count: 0, car: "-", ev: "-" },
-      "Comment HMM": { count: 0, car: "-", ev: "-" },
+      "nc1 (Major NC)": { count: 0, car: "-", ev: "-" }, "nc2 (Minor NC) HMM": { count: 0, car: "-", ev: "-" },
+      "nc2 (Minor NC) LPB": { count: 0, car: "-", ev: "-" }, "OFI HMM": { count: 0, car: "-", ev: "-" },
+      "OFI LPB": { count: 0, car: "-", ev: "-" }, "Comment HMM": { count: 0, car: "-", ev: "-" },
       "Comment LPB": { count: 0, car: "-", ev: "-" }
     }
   };
   
   if (data.length <= 1) return stats;
   
+  var yearsSet = new Set();
+  for (var i = 1; i < data.length; i++) { if (data[i][23]) yearsSet.add(data[i][23]); }
+  stats.availableYears = Array.from(yearsSet).sort().reverse();
+
   var today = new Date();
   today.setHours(0,0,0,0);
   
@@ -67,15 +105,16 @@ function getDashboardData() {
     var row = data[i];
     if (!row || row.length === 0) continue; 
     
+    var rowYear = row[23] || "";
+    if (selectedYear && selectedYear !== "All" && rowYear !== selectedYear) continue;
+
     var status = row[15] || "";
     var deadlineStr = row[13] || "";
-    var findingsStr = row[6] || ""; // คอลัมน์ Finding
+    var findingsStr = row[6] || ""; 
     
-    // นับประเภท Finding และเก็บ Deadline ล่าสุด (เนื่องจากวนลูปจากล่างขึ้นบน)
     for (var key in stats.findingSummary) {
       if (findingsStr.indexOf(key) !== -1) {
         stats.findingSummary[key].count++;
-        // ถ้ายังไม่มีวันเวลาที่บันทึกไว้ ให้ใช้อันล่าสุดที่เจอ
         if (stats.findingSummary[key].car === "-") {
           stats.findingSummary[key].car = row[13] || "-";
           stats.findingSummary[key].ev = row[16] || "-";
@@ -97,14 +136,18 @@ function getDashboardData() {
     }
     
     stats.records.push({
-      date: row[2] || "", plant: row[3] || "", findings: row[6] || "", 
-      dept: row[7] || "", carDetail: row[8] || "", carFiles: row[9] || "",
-      whyDetail: row[10] || "", whyFiles: row[11] || "", carEmail: row[12] || "",
-      carDeadline: row[13] || "", carIntDeadline: row[14] || "",
-      statusCar: row[15] || "", evDeadline: row[16] || "",
-      fu1: row[18] || "", fu2: row[19] || "", fu3: row[20] || "",
-      yokotenDetail: row[21] || "", yokotenFiles: row[22] || ""
+      id: row[1] || "", 
+      date: row[2] || "", plant: row[3] || "", detail: row[4] || "", reportFiles: row[5] || "",
+      findings: row[6] || "", dept: row[7] || "", carDetail: row[8] || "", carFiles: row[9] || "",
+      whyDetail: row[10] || "", whyFiles: row[11] || "", createdBy: row[12] || "",
+      carDeadline: row[13] || "", carIntDeadline: row[14] || "", statusCar: row[15] || "", 
+      evDeadline: row[16] || "", evStatus: row[17] || "", fu1: row[18] || "", fu2: row[19] || "", 
+      fu3: row[20] || "", yokotenDetail: row[21] || "", yokotenFiles: row[22] || "",
+      createdBy: row[24] || "" 
     });
   }
   return stats;
 }
+
+function getSharedReport() { var ss = SpreadsheetApp.openById(SHEET_ID); var sheet = ss.getSheetByName("ReportData"); if (!sheet) return ""; return sheet.getRange("A1").getValue(); }
+function saveSharedReport(htmlContent) { var ss = SpreadsheetApp.openById(SHEET_ID); var sheet = ss.getSheetByName("ReportData"); if (!sheet) { sheet = ss.insertSheet("ReportData"); } sheet.getRange("A1").setValue(htmlContent); return true; }
