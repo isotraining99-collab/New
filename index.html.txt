@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <base target="_top">
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Audit Report TUV</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/6.8.3/tinymce.min.js"></script>
     <?!= include('stylesheet'); ?>
 </head>
 <body>
@@ -61,29 +63,52 @@
         </div>
 
         <div class="card shadow-sm mb-4">
-    <div class="card-header bg-white py-3">
-        <h6 class="m-0 font-weight-bold text-primary"><i class="bi bi-graph-up-arrow"></i> Finding Summary</h6>
-    </div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-bordered table-sm text-center">
-                <thead class="bg-light">
-                    <tr>
-                        <th rowspan="2" class="align-middle">Finding</th>
-                        <th rowspan="2" class="align-middle">Number of finding</th>
-                        <th colspan="2">Submission Deadline</th>
-                    </tr>
-                    <tr>
-                        <th>CAR</th>
-                        <th>Evidence</th>
-                    </tr>
-                </thead>
-                <tbody id="findingSummaryBody">
-                    </tbody>
-            </table>
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="bi bi-graph-up-arrow"></i> Finding Summary</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm text-center">
+                        <thead class="bg-light">
+                            <tr>
+                                <th rowspan="2" class="align-middle">Finding</th>
+                                <th rowspan="2" class="align-middle">Number of finding</th>
+                                <th colspan="2">Submission Deadline</th>
+                            </tr>
+                            <tr>
+                                <th>CAR</th>
+                                <th>Evidence</th>
+                            </tr>
+                        </thead>
+                        <tbody id="findingSummaryBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-    </div>
-</div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="bi bi-file-earmark-word"></i> Audit Report TUV
+                </h6>
+                <div class="d-flex gap-2">
+                    <button id="btnViewMode" class="btn btn-sm btn-primary fw-bold active" onclick="setEditorMode('view')">
+                        <i class="bi bi-eye"></i> View Mode
+                    </button>
+                    <button id="btnEditMode" class="btn btn-sm btn-outline-secondary fw-bold" onclick="setEditorMode('edit')">
+                        <i class="bi bi-pencil"></i> Edit Mode
+                    </button>
+                    <button id="btnSaveReport" class="btn btn-sm btn-success fw-bold shadow-sm" onclick="saveSharedReport()" style="display: none;">
+                        <i class="bi bi-save"></i> Save Report
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <input type="file" id="hiddenDocUploader" multiple style="display:none;" onchange="uploadDirectToDoc(this)" />
+                <textarea id="sharedReportEditor" class="form-control" rows="15"></textarea>
+            </div>
+        </div>
 
         <div id="formSection" class="white-glass p-4 p-md-5 mb-5 shadow" style="display:none;">
             <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
@@ -92,6 +117,8 @@
             </div>
             
             <form id="auditForm" class="row g-4">
+                <input type="hidden" id="hiddenAuditId" value="" />
+                
                 <div class="col-md-4">
                     <label class="form-label fw-bold">Audit Date</label>
                     <input type="date" id="auditDate" class="form-control custom-input" required />
@@ -153,14 +180,9 @@
                     </div>
                 </div>
 
-                <div class="col-md-4">
-                    <label class="form-label fw-bold">In Charge (Email)</label>
-                    <select id="carEmail" class="form-select custom-input">
-                        <option>user.a@minebea.co.th</option>
-                        <option>manager.b@minebea.co.th</option>
-                        <option>isotraining99@minebea.co.th</option>
-                    </select>
-                </div>
+  <div class="col-md-4"><label class="form-label fw-bold small">In Charge (Email)</label><input type="text" id="createdBy" class="form-control custom-input" /></div>
+
+
                 <div class="col-md-4">
                     <label class="form-label fw-bold text-danger">CAR Deadline</label>
                     <input type="date" id="carDeadline" class="form-control custom-input border-danger" />
@@ -212,28 +234,60 @@
         </div>
 
         <div class="white-glass p-4 shadow-sm">
-            <div class="white-glass p-4 shadow-sm">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h5 class="fw-bold mb-0 text-mnb"><i class="bi bi-grid-3x3-gap"></i> Audit History</h5>
             </div>
             
             <div class="row mb-3">
-    <div class="col-md-4 col-sm-6">
-        <div class="input-group shadow-sm">
-            <span class="input-group-text bg-primary text-white"><i class="bi bi-funnel-fill"></i></span>
-            <select id="plantFilter" class="form-select" onchange="filterTable()">
-                <option value="">-- (All) --</option>
-                <option value="HMM">HMM</option>
-                <option value="Lopburi">Lopburi (LPB)</option>
-            </select>
-        </div>
-    </div>
-</div>
+                <div class="col-md-3 col-sm-12 mb-2">
+                    <div class="input-group shadow-sm h-100">
+                        <span class="input-group-text bg-secondary text-white"><i class="bi bi-calendar3"></i></span>
+                        <select id="yearFilter" class="form-select" onchange="loadDashboardData()">
+                            <option value="All">-- All Years --</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="col-md-3 col-sm-12 mb-2">
+                    <div class="input-group shadow-sm h-100">
+                        <span class="input-group-text bg-primary text-white"><i class="bi bi-funnel-fill"></i></span>
+                        <select id="plantFilter" class="form-select" onchange="filterTable()">
+                            <option value="">-- All Plant --</option>
+                            <option value="HMM">HMM</option>
+                            <option value="Lopburi">Lopburi (LPB)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-sm-12 mb-2">
+                    <div class="dropdown shadow-sm h-100">
+                        <button class="btn btn-white border dropdown-toggle w-100 text-start bg-white d-flex justify-content-between align-items-center h-100 custom-input" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <span><i class="bi bi-tags-fill text-mnb me-2"></i> Filter by Findings</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow w-100" style="min-width: 320px;">
+                            <h6 class="dropdown-header px-0 text-dark fw-bold border-bottom pb-2 mb-2">Select Findings:</h6>
+                            <div class="row g-2">
+                                <div class="col-md-6"><div class="form-check"><input class="form-check-input finding-filter-cb" type="checkbox" value="nc1 (Major NC)" id="ff1" onchange="filterTable()"><label class="form-check-label small cursor-pointer" for="ff1">nc1 (Major NC)</label></div></div>
+                                <div class="col-md-6"><div class="form-check"><input class="form-check-input finding-filter-cb" type="checkbox" value="nc2 (Minor NC) HMM" id="ff2" onchange="filterTable()"><label class="form-check-label small cursor-pointer" for="ff2">nc2 (Minor NC) HMM</label></div></div>
+                                <div class="col-md-6"><div class="form-check"><input class="form-check-input finding-filter-cb" type="checkbox" value="nc2 (Minor NC) LPB" id="ff3" onchange="filterTable()"><label class="form-check-label small cursor-pointer" for="ff3">nc2 (Minor NC) LPB</label></div></div>
+                                <div class="col-md-6"><div class="form-check"><input class="form-check-input finding-filter-cb" type="checkbox" value="OFI HMM" id="ff4" onchange="filterTable()"><label class="form-check-label small cursor-pointer" for="ff4">OFI HMM</label></div></div>
+                                <div class="col-md-6"><div class="form-check"><input class="form-check-input finding-filter-cb" type="checkbox" value="OFI LPB" id="ff5" onchange="filterTable()"><label class="form-check-label small cursor-pointer" for="ff5">OFI LPB</label></div></div>
+                                <div class="col-md-6"><div class="form-check"><input class="form-check-input finding-filter-cb" type="checkbox" value="Comment HMM" id="ff6" onchange="filterTable()"><label class="form-check-label small cursor-pointer" for="ff6">Comment HMM</label></div></div>
+                                <div class="col-md-6"><div class="form-check"><input class="form-check-input finding-filter-cb" type="checkbox" value="Comment LPB" id="ff7" onchange="filterTable()"><label class="form-check-label small cursor-pointer" for="ff7">Comment LPB</label></div></div>
+                            </div>
+                            <div class="mt-3 text-end">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearFindingFilters()">Clear All</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
                 <table class="table table-hover align-middle table-bordered" style="white-space: nowrap;">
                     <thead class="table-light text-center" style="position: sticky; top: 0; z-index: 1;">
                         <tr>
+                            <th class="bg-warning text-dark"><i class="bi bi-gear"></i> Action</th>
                             <th>Date</th>
                             <th>Plant</th>
                             <th>Findings</th>
@@ -255,8 +309,7 @@
                 </table>
             </div>
         </div>
-
-
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <?!= include('JavaScript'); ?>
