@@ -1,9 +1,138 @@
 <script>
     let statusChartInstance = null;
+    let currentIsAdmin = false;
 
     window.onload = () => {
         loadDashboardData();
+
+        tinymce.init({
+            selector: '#sharedReportEditor',
+            plugins: 'link image table lists autolink',
+            toolbar: 'undo redo | blocks | bold italic textcolor | alignleft aligncenter alignright | bullist numlist | table | link image uploaddrive',
+            height: 500,
+            branding: false,
+            promotion: false,
+            readonly: true,
+            
+            content_style: `
+                .file-link-box { display: inline-flex; align-items: center; padding: 6px 14px; margin: 5px; border-radius: 8px; font-weight: 500; text-decoration: none !important; border: 2px solid #cbd5e1; background-color: #f8fafc; color: #334155 !important; font-family: system-ui, sans-serif; }
+                .file-link-box:hover { transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                .file-pdf { border-color: #ef4444; background-color: #fef2f2; color: #991b1b !important; }
+                .file-excel { border-color: #22c55e; background-color: #f0fdf4; color: #166534 !important; }
+                .file-word { border-color: #3b82f6; background-color: #eff6ff; color: #1e40af !important; }
+                .file-image { border-color: #a855f7; background-color: #faf5ff; color: #6b21a8 !important; }
+                
+                .upload-loading-box { display: inline-flex; align-items: center; padding: 6px 14px; margin: 5px; border: 2px dashed #f59e0b; background-color: #fffbeb; color: #d97706; border-radius: 8px; font-weight: bold; font-family: system-ui, sans-serif; animation: reportPulse 1.5s infinite; }
+                @keyframes reportPulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+            `,
+            
+            setup: function (editor) {
+                editor.ui.registry.addButton('uploaddrive', {
+                    icon: 'upload',
+                    tooltip: 'Upload & Insert Files',
+                    onAction: function () { document.getElementById('hiddenDocUploader').click(); }
+                });
+                editor.on('init', function () { loadSharedReport(); });
+            }
+        });
     };
+
+    function setEditorMode(mode) {
+        const editor = tinymce.get('sharedReportEditor');
+        if (!editor) return;
+
+        const btnView = document.getElementById('btnViewMode');
+        const btnEdit = document.getElementById('btnEditMode');
+        const btnSave = document.getElementById('btnSaveReport');
+
+        if (mode === 'view') {
+            editor.mode.set('readonly');
+            btnView.classList.add('btn-primary', 'active');
+            btnView.classList.remove('btn-outline-secondary');
+            btnEdit.classList.add('btn-outline-secondary');
+            btnEdit.classList.remove('btn-primary', 'active');
+            btnSave.style.display = 'none';
+        } else {
+            editor.mode.set('design');
+            btnEdit.classList.add('btn-primary', 'active');
+            btnEdit.classList.remove('btn-outline-secondary');
+            btnView.classList.add('btn-outline-secondary');
+            btnView.classList.remove('btn-primary', 'active');
+            btnSave.style.display = 'inline-block';
+        }
+    }
+
+    function loadSharedReport() {
+        google.script.run.withSuccessHandler(content => {
+            const editor = tinymce.get('sharedReportEditor');
+            if (content && editor) editor.setContent(content);
+        }).getSharedReport();
+    }
+
+    function saveSharedReport() {
+        const editor = tinymce.get('sharedReportEditor');
+        if (!editor) return; 
+        
+        const content = editor.getContent();
+        const btn = document.getElementById('btnSaveReport');
+        const originalText = btn.innerHTML;
+        
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+        btn.disabled = true;
+
+        google.script.run.withSuccessHandler(() => {
+            alert('✅ Report details saved successfully!');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            setEditorMode('view');
+        }).saveSharedReport(content);
+    }
+
+    async function uploadDirectToDoc(input) {
+        const files = input.files;
+        if (files.length === 0) return;
+
+        const editor = tinymce.activeEditor;
+        
+        for (let i = 0; i < files.length; i++) {
+            let file = files[i];
+            let fileId = 'loading-' + Math.random().toString(36).substring(2, 9);
+            
+            let loadingHtml = `<span id="${fileId}" class="upload-loading-box" contenteditable="false">⏳ กำลังอัปโหลด: ${file.name}...</span>`;
+            editor.insertContent(loadingHtml);
+
+            let reader = new FileReader();
+            reader.readAsDataURL(file);
+
+            await new Promise((resolve) => {
+                reader.onload = () => {
+                    google.script.run.withSuccessHandler(url => {
+                        if (url) {
+                            let ext = file.name.split('.').pop().toLowerCase();
+                            let colorClass = ''; let icon = '📄';
+
+                            if (ext === 'pdf') { colorClass = 'file-pdf'; icon = '📕'; } 
+                            else if (['xlsx', 'xls', 'csv'].includes(ext)) { colorClass = 'file-excel'; icon = '📗'; } 
+                            else if (['docx', 'doc'].includes(ext)) { colorClass = 'file-word'; icon = '📘'; } 
+                            else if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) { colorClass = 'file-image'; icon = '🖼️'; }
+
+                            let finalHtml = `<a href="${url}" target="_blank" class="file-link-box ${colorClass}" contenteditable="false">${icon} ${file.name}</a>&nbsp;`;
+                            
+                            let loadingNode = editor.dom.select(`#${fileId}`)[0];
+                            if (loadingNode) editor.dom.setOuterHTML(loadingNode, finalHtml);
+                            else editor.insertContent(finalHtml);
+                        } else {
+                            let loadingNode = editor.dom.select(`#${fileId}`)[0];
+                            if (loadingNode) editor.dom.remove(loadingNode);
+                            alert('อัปโหลดไฟล์ ' + file.name + ' ผิดพลาด');
+                        }
+                        resolve();
+                    }).uploadFile(reader.result, file.name);
+                };
+            });
+        }
+        input.value = ''; 
+    }
 
     function toggleForm() {
         const form = document.getElementById('formSection');
@@ -12,12 +141,13 @@
     }
 
     function uploadSingleFile(fileInputId) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const file = document.getElementById(fileInputId).files[0];
             if (!file) { resolve(""); return; }
             
             const reader = new FileReader();
             reader.readAsDataURL(file);
+         
             reader.onload = () => {
                 google.script.run
                     .withSuccessHandler(url => resolve(url))
@@ -28,32 +158,30 @@
 
     async function processForm() {
         const btn = document.getElementById('btnSubmit');
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> UPLOADING...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> SAVING...';
         btn.disabled = true;
 
         try {
-            const selectedFindings = Array.from(document.querySelectorAll('input[name="finding"]:checked'))
-                                          .map(cb => cb.value).join(', ');
-
+            const selectedFindings = Array.from(document.querySelectorAll('input[name="finding"]:checked')).map(cb => cb.value).join(', ');
+            
             const [reportUrl, carUrl, whyUrl, yokotenUrl] = await Promise.all([
-                uploadSingleFile('reportFiles'),
-                uploadSingleFile('carFiles'),
-                uploadSingleFile('whyFiles'),
-                uploadSingleFile('yokotenFiles')
+                uploadSingleFile('reportFiles'), uploadSingleFile('carFiles'),
+                uploadSingleFile('whyFiles'), uploadSingleFile('yokotenFiles')
             ]);
-
+            
             const payload = {
+                hiddenAuditId: document.getElementById('hiddenAuditId').value,
                 auditDate: document.getElementById('auditDate').value,
                 plant: document.getElementById('plant').value,
                 dept: document.getElementById('dept').value,
-                findings: selectedFindings,
+                findings: selectedFindings,             
                 detail: document.getElementById('detail').value,
                 reportFiles: reportUrl,
                 carDetail: document.getElementById('carDetail').value,
                 carFiles: carUrl,
                 whyDetail: document.getElementById('whyDetail').value,
                 whyFiles: whyUrl,
-                carEmail: document.getElementById('carEmail').value,
+                createdBy: document.getElementById('createdBy').value,
                 carDeadline: document.getElementById('carDeadline').value,
                 carIntDeadline: document.getElementById('carIntDeadline').value,
                 statusCar: document.getElementById('statusCar').value,
@@ -70,40 +198,51 @@
                 .withSuccessHandler(msg => {
                     alert(msg);
                     document.getElementById('auditForm').reset();
+                    document.getElementById('hiddenAuditId').value = ""; 
+                    document.getElementById('statusCar').disabled = false; 
+                    document.getElementById('evStatus').disabled = false;
+                    
+                    btn.innerHTML = 'SUBMIT DATA'; 
+                    btn.classList.replace('btn-warning', 'btn-mnb'); 
+                    btn.disabled = false;
+                    
                     toggleForm();
-                    loadDashboardData();
-                    btn.innerHTML = 'SUBMIT DATA'; btn.disabled = false;
+                    loadDashboardData(); 
                 })
                 .saveAuditData(payload);
-
         } catch(e) {
             alert("Error: " + e);
             btn.innerHTML = 'SUBMIT DATA'; btn.disabled = false;
         }
     }
 
-    // ฟังก์ชันแปลงวันที่เป็นภาษาอังกฤษ เช่น 14 May 2026
     function formatEnglishDate(dateString) {
         if (!dateString || dateString === "-" || dateString.trim() === "") return dateString;
-        
-        // รองรับกรณี Sheet คืนค่ามาเป็น DD/MM/YYYY
         let d;
         if (dateString.includes('/')) {
             let parts = dateString.split('/');
-            if (parts[0].length <= 2) { 
-                d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); // แปลงเป็น YYYY-MM-DD ให้ JS รู้จัก
-            } else { d = new Date(dateString); }
-        } else {
-            d = new Date(dateString);
-        }
-
-        if (isNaN(d.getTime())) return dateString; // ถ้าแปลงไม่ได้ให้คืนค่าเดิม
-        
+            if (parts[0].length <= 2) d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            else d = new Date(dateString);
+        } else d = new Date(dateString);
+        if (isNaN(d.getTime())) return dateString;
         return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     }
 
-function loadDashboardData() {
+    function loadDashboardData() {
+        const selectedYear = document.getElementById('yearFilter') ? document.getElementById('yearFilter').value : "All";
+        
         google.script.run.withSuccessHandler(data => {
+            currentIsAdmin = data.isAdmin; 
+            
+            const yearSelect = document.getElementById('yearFilter');
+            if (yearSelect && yearSelect.options.length <= 1 && data.availableYears.length > 0) {
+                data.availableYears.forEach(y => {
+                    let opt = document.createElement('option');
+                    opt.value = y; opt.text = "Year " + y;
+                    yearSelect.appendChild(opt);
+                });
+            }
+
             document.getElementById('stat-total').innerText = data.total;
             document.getElementById('stat-open').innerText = data.open;
             document.getElementById('stat-closed').innerText = data.closed;
@@ -111,79 +250,116 @@ function loadDashboardData() {
             drawPieChart(data.open, data.closed, data.overdue);
             
             const summaryBody = document.getElementById('findingSummaryBody');
-        let summaryHtml = '';
-        const keys = [
-            "nc1 (Major NC)", "nc2 (Minor NC) HMM", "nc2 (Minor NC) LPB",
-            "OFI HMM", "OFI LPB", "Comment HMM", "Comment LPB"
-        ];
-        
-        keys.forEach(key => {
-            const item = data.findingSummary[key];
-            summaryHtml += `
-                <tr>
-                    <td class="text-start ps-3">${key}</td>
-                    <td class="fw-bold">${item.count}</td>
-                    <td>${item.car}</td>
-                    <td>${item.ev}</td>
-                </tr>`;
-        });
-        summaryBody.innerHTML = summaryHtml;
+            let summaryHtml = '';
+            const keys = ["nc1 (Major NC)", "nc2 (Minor NC) HMM", "nc2 (Minor NC) LPB", "OFI HMM", "OFI LPB", "Comment HMM", "Comment LPB"];
+            
+            keys.forEach(key => {
+                const item = data.findingSummary[key];
+                summaryHtml += `<tr><td class="text-start ps-3">${key}</td><td class="fw-bold">${item.count}</td><td>${item.car}</td><td>${item.ev}</td></tr>`;
+            });
+            summaryBody.innerHTML = summaryHtml;
 
             const tbody = document.getElementById('tableBody');
             let html = '';
-            
             data.records.forEach(raw => {
                 const r = {};
-                for (let key in raw) {
-                    r[key] = (raw[key] === undefined || raw[key] === null || raw[key] === "undefined" || raw[key] === "") ? "" : raw[key];
+                for (let key in raw) r[key] = (raw[key] === undefined || raw[key] === null || raw[key] === "undefined" || raw[key] === "") ? "" : raw[key];
+
+                let actionBtn = '';
+                if (data.isAdmin || data.currentUserEmail === r.createdBy) {
+                    let recordJson = encodeURIComponent(JSON.stringify(raw));
+                    actionBtn = `<button class="btn btn-sm btn-primary shadow-sm" onclick="editRecord('${recordJson}')"><i class="bi bi-pencil-square"></i> Edit</button>`;
+                } else {
+                    actionBtn = `<button class="btn btn-sm btn-light text-muted border" disabled title="Locked"><i class="bi bi-lock-fill"></i></button>`;
                 }
 
-                 r.date = formatEnglishDate(r.date);
-                r.carDeadline = formatEnglishDate(r.carDeadline);
-                r.carIntDeadline = formatEnglishDate(r.carIntDeadline);
-                r.evDeadline = formatEnglishDate(r.evDeadline);
-
                 let statusClass = r.statusCar === 'Open' ? 'bg-warning text-dark' : 'bg-success';
-                
-                // 🌟 ปรับโค้ดให้ปลอดภัยขึ้น ถ้าไม่มีไฟล์ ระบบจะไม่พัง
                 let carFileLink = (r.carFiles && r.carFiles.length > 10) ? `<br><a href="${r.carFiles}" target="_blank" class="badge bg-primary text-decoration-none mt-2"><i class="bi bi-paperclip"></i> View CAR File</a>` : '';
                 let whyFileLink = (r.whyFiles && r.whyFiles.length > 10) ? `<br><a href="${r.whyFiles}" target="_blank" class="badge bg-primary text-decoration-none mt-2"><i class="bi bi-paperclip"></i> View 5 Why File</a>` : '';
                 let yokoFileLink = (r.yokotenFiles && r.yokotenFiles.length > 10) ? `<br><a href="${r.yokotenFiles}" target="_blank" class="badge bg-primary text-decoration-none mt-2"><i class="bi bi-paperclip"></i> View Yoko-ten File</a>` : '';
-
+                
                 html += `<tr>
-                    <td class="text-center">${r.date}</td>
+                    <td class="text-center">${actionBtn}</td> 
+                    <td class="text-center">${formatEnglishDate(r.date)}</td>
                     <td class="text-center">${r.plant}</td>
                     <td class="small text-wrap" style="min-width: 150px;">${r.findings}</td>
                     <td class="text-center"><span class="badge bg-light text-dark border">${r.dept}</span></td>
-                    
                     <td class="small text-wrap" style="min-width: 250px;">${r.carDetail} ${carFileLink}</td>
                     <td class="small text-wrap" style="min-width: 250px;">${r.whyDetail} ${whyFileLink}</td>
-                    
-                    <td class="small text-center">${r.carEmail}</td>
-                    <td class="text-center">${r.carDeadline}</td>
-                    <td class="text-center">${r.carIntDeadline}</td>
+                    <td class="small text-center">${r.createdBy}</td>
+                    <td class="text-center">${formatEnglishDate(r.carDeadline)}</td>
+                    <td class="text-center">${formatEnglishDate(r.carIntDeadline)}</td>
                     <td class="text-center"><span class="badge ${statusClass}">${r.statusCar}</span></td>
-                    
-                    <td class="text-center">${r.evDeadline}</td>
+                    <td class="text-center">${formatEnglishDate(r.evDeadline)}</td>
                     <td class="small text-wrap" style="min-width: 150px;">${r.fu1}</td>
                     <td class="small text-wrap" style="min-width: 150px;">${r.fu2}</td>
                     <td class="small text-wrap" style="min-width: 150px;">${r.fu3}</td>
                     <td class="small text-wrap" style="min-width: 200px;">${r.yokotenDetail} ${yokoFileLink}</td>
                 </tr>`;
             });
-            
-            tbody.innerHTML = html || '<tr><td colspan="15" class="text-center py-5 text-muted">No records found.</td></tr>';
-        }).getDashboardData();
+            tbody.innerHTML = html || '<tr><td colspan="16" class="text-center py-5 text-muted">No records found for this year.</td></tr>';
+        }).getDashboardData(selectedYear);
+    }
+
+    function editRecord(jsonStr) {
+        let r = JSON.parse(decodeURIComponent(jsonStr));
+        
+        const form = document.getElementById('formSection');
+        form.style.display = 'block';
+        form.scrollIntoView({ behavior: 'smooth' });
+
+        document.getElementById('hiddenAuditId').value = r.id; 
+        document.getElementById('btnSubmit').innerHTML = '<i class="bi bi-arrow-repeat"></i> UPDATE DATA'; 
+        document.getElementById('btnSubmit').classList.replace('btn-mnb', 'btn-warning');
+
+        const formatDateForInput = (dateStr) => {
+            if(!dateStr || dateStr.trim() === "") return "";
+            let d = new Date(dateStr);
+            if (isNaN(d.getTime())) return "";
+            return d.toISOString().split('T')[0];
+        };
+
+        document.getElementById('auditDate').value = formatDateForInput(r.date);
+        document.getElementById('plant').value = r.plant;
+        document.getElementById('dept').value = r.dept;
+        document.getElementById('detail').value = r.detail;
+        
+        document.querySelectorAll('input[name="finding"]').forEach(cb => { cb.checked = false; });
+        if(r.findings) {
+            let fArr = r.findings.split(',').map(s => s.trim());
+            document.querySelectorAll('input[name="finding"]').forEach(cb => {
+                if(fArr.includes(cb.value)) cb.checked = true;
+            });
+        }
+
+        document.getElementById('carDetail').value = r.carDetail;
+        document.getElementById('whyDetail').value = r.whyDetail;
+        document.getElementById('carEmail').value = r.carEmail;
+        document.getElementById('carDeadline').value = formatDateForInput(r.carDeadline);
+        document.getElementById('carIntDeadline').value = formatDateForInput(r.carIntDeadline);
+        document.getElementById('evDeadline').value = formatDateForInput(r.evDeadline);
+        document.getElementById('fu1').value = r.fu1;
+        document.getElementById('fu2').value = r.fu2;
+        document.getElementById('fu3').value = r.fu3;
+        document.getElementById('yokotenDetail').value = r.yokotenDetail;
+
+        document.getElementById('statusCar').value = r.statusCar || "Open";
+        document.getElementById('evStatus').value = r.evStatus || "Open";
+
+        if (currentIsAdmin) {
+            document.getElementById('statusCar').disabled = false;
+            document.getElementById('evStatus').disabled = false;
+        } else {
+            document.getElementById('statusCar').disabled = true;
+            document.getElementById('evStatus').disabled = true;
+        }
     }
 
     function drawPieChart(open, closed, overdue) {
         const ctx = document.getElementById('statusChart').getContext('2d');
         if(statusChartInstance) statusChartInstance.destroy();
 
-        // คำนวณยอดรวมเพื่อหา %
         const total = open + closed + overdue;
-
-        // Plugin สำหรับวาด % ลงบนเนื้อสีของวงกลมแต่ละชิ้น
         const slicePercentPlugin = {
             id: 'slicePercent',
             afterDraw: (chart) => {
@@ -192,97 +368,77 @@ function loadDashboardData() {
                     const meta = chart.getDatasetMeta(i);
                     meta.data.forEach((element, index) => {
                         const dataVal = dataset.data[index];
-                        // วาด % เฉพาะชิ้นที่มีค่ามากกว่า 0
                         if (dataVal > 0) { 
                             const percent = Math.round((dataVal / total) * 100) + '%';
-                            
-                            // หาตำแหน่งกึ่งกลางของชิ้นนั้นๆ
                             const position = element.tooltipPosition();
-                            
-                            ctx.fillStyle = '#ffffff'; // สีตัวอักษร (ขาว)
+                            ctx.fillStyle = '#ffffff'; 
                             ctx.font = 'bold 13px sans-serif';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            
-                            // ใส่เงาให้ตัวหนังสือโดดเด้งขึ้นมา อ่านง่ายบนทุกสี
-                            ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-                            ctx.shadowBlur = 4;
-                            ctx.shadowOffsetX = 1;
-                            ctx.shadowOffsetY = 1;
-                            
+                            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                            ctx.shadowColor = 'rgba(0, 0, 0, 0.7)'; ctx.shadowBlur = 4;
+                            ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1;
                             ctx.fillText(percent, position.x, position.y);
-                            
-                            // เคลียร์ค่าเงา
                             ctx.shadowColor = 'transparent';
                         }
                     });
                 });
             }
         };
-
+        
         statusChartInstance = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: ['Open', 'Closed', 'Overdue'],
-                datasets: [{
-                    data: [open, closed, overdue],
-                    backgroundColor: ['#f59e0b', '#10b981', '#ef4444'],
-                    borderWidth: 2,
-                    borderColor: '#ffffff' // เพิ่มขอบสีขาวกั้นระหว่างชิ้นให้ดูเนียนขึ้น
-                }]
+                datasets: [{ data: [open, closed, overdue], backgroundColor: ['#f59e0b', '#10b981', '#ef4444'], borderWidth: 2, borderColor: '#ffffff' }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 plugins: { 
                     legend: { display: false },
-                    // ปรับแต่ง Tooltip เวลาเอาเมาส์ชี้ให้โชว์ "จำนวน (เปอร์เซ็นต์)"
                     tooltip: {
                         callbacks: {
                             label: function(context) {
                                 let label = context.label || '';
-                                if (label) { label += ': '; }
-                                if (context.parsed !== null) {
-                                    let pct = Math.round((context.parsed / total) * 100) + '%';
-                                    label += context.parsed + ' (' + pct + ')';
-                                }
+                                if (label) label += ': ';
+                                if (context.parsed !== null) label += context.parsed + ' (' + Math.round((context.parsed / total) * 100) + '%)';
                                 return label;
                             }
                         }
                     }
                 },
-                cutout: '55%' // ปรับรูกลางให้เล็กลง เพื่อให้มีที่เขียน % บนนเนื้อวงกลม
+                cutout: '55%' 
             },
-            plugins: [slicePercentPlugin] // เรียกใช้ Plugin วาด % บนวงกลม
+            plugins: [slicePercentPlugin] 
         });
     }
 
-// 🌟 ฟังก์ชันสำหรับกรองข้อมูลจาก Dropdown (ค้นหาเฉพาะคอลัมน์ Plant)
-function filterTable() {
-    // รับค่าที่เลือกจาก Dropdown มาแปลงเป็นตัวพิมพ์เล็ก
-    const filter = document.getElementById('plantFilter').value.toLowerCase();
-    const tbody = document.getElementById('tableBody');
-    const trs = tbody.getElementsByTagName('tr');
+    function filterTable() {
+        const plantFilter = document.getElementById('plantFilter').value.toLowerCase();
+        const findingCheckboxes = document.querySelectorAll('.finding-filter-cb:checked');
+        const selectedFindings = Array.from(findingCheckboxes).map(cb => cb.value.toLowerCase());
 
-    // วนลูปเช็คข้อมูลในแต่ละแถวของตาราง
-    for (let i = 0; i < trs.length; i++) {
-        // ข้ามแถวที่แจ้งว่า No records found (แถวที่มีคอลัมน์เดียว)
-        if (trs[i].cells.length <= 1) continue;
+        const tbody = document.getElementById('tableBody');
+        const trs = tbody.getElementsByTagName('tr');
+        for (let i = 0; i < trs.length; i++) {
+            if (trs[i].cells.length <= 2) continue;
+            let plantCell = trs[i].cells[2]; 
+            let findingsCell = trs[i].cells[3]; 
 
-        // ดึงข้อมูลเฉพาะ "คอลัมน์ที่ 2" (Plant) ซึ่งก็คือ cells[1] 
-        let plantCell = trs[i].cells[1];
-        
-        if (plantCell) {
-            let plantText = plantCell.textContent.toLowerCase();
+            if (plantCell && findingsCell) {
+                let plantText = plantCell.textContent.toLowerCase();
+                let findingsText = findingsCell.textContent.toLowerCase();
 
-            // ถ้าเลือก "แสดงทั้งหมด" (ค่าว่าง) หรือ ข้อความในคอลัมน์ Plant มีคำที่เลือก
-            if (filter === "" || plantText.includes(filter)) {
-                trs[i].style.display = ''; // แสดงแถว
-            } else {
-                trs[i].style.display = 'none'; // ซ่อนแถว
+                let matchPlant = (plantFilter === "" || plantText.includes(plantFilter));
+                let matchFindings = true;
+                if (selectedFindings.length > 0) matchFindings = selectedFindings.some(word => findingsText.includes(word));
+
+                if (matchPlant && matchFindings) trs[i].style.display = '';
+                else trs[i].style.display = 'none';
             }
         }
     }
-} 
 
+    function clearFindingFilters() {
+        document.querySelectorAll('.finding-filter-cb').forEach(cb => cb.checked = false);
+        filterTable(); 
+    }
 </script>
