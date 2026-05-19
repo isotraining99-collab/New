@@ -1,0 +1,52 @@
+
+1)ชื่อคือ Audit Report TUV
+    มีให้กรอก Audit_Data=…input date…
+    คลิก Plant มี Dropdown select 1.HMM  , 2.Lopburi
+    มีการกรอกDetailของแต่ละไฟล์  
+    ช่องReport files = drop files ไว้ที่นี่
+    ช่องFinding=>สามารถเลือกได้หลายfinding item คลิกที่ช่องนี้จะมี Dropdown select ดังนี้1) nc1 (Major NC) 2) nc2 (Minor NC) HMM 3) nc2 (Minor NC) LPB 4) OFI HMM 5) OFI LPB 6) Comment HMM 7) Comment LPB
+    ช่อง Dept In charge คลิกไปจะมี Dropdown select ดังนี้ 1)PC, MC, QC, PRON’D, ENG, PE, Tooling, ISO
+
+ช่อง CAR(Internal) = drop file และ พิมพ์รายละเอียดdetailได้
+ช่อง 5 Why = drop file และพิมพ์รายละเอียดdetailได้
+ช่อง CAR In charge (Email) จะมี email list ของคนในบริษัท
+CAR Dead Line = input date
+CAR Internal Dead Line = input date
+Status CAR internal ใช้ Dropdown select มี close และ open (admin สามารถเปิดปิดได้)
+Evidence Dead Line = input date
+Evidence Status ใช้ Dropdown select มี close และ open (admin สามารถเปิดปิดได้)
+Follow-up 1 = text boxว่างๆไปก่อน
+Follow-up 2 = text boxว่างๆไปก่อน
+Follow-up 3 = text boxว่างๆไปก่อน
+
+Yoko-ten Schedule Files & Details => มีdrop file และ ใส่detail ได้
+
+ทั้งหมดต้องแสดงเป็นตารางให้ชัดเจน  มีกราฟวงกลมแสดงfindind status มีdashboardโชว์Total finding, open CAR, close CAR, Overdue แสดงสถานะ ต่างๆครบถ้วนเพื่อความดูง่ายและภาพรวมสไตล์ทันสมัย ล้ำๆ อวกาศ3D เน้นสะอาดตา ส่งมาเป็น4ไฟล์ code.gs , index.html , stylessheet.html , JavaScript.html สอนสร้าง Data base ในgoogle sheetด้วยครับ
+
+ที่ตารางหัวข้อCAR (Internal)	5 Why	CAR In Charge (Email)	CAR Deadline	Internal Deadline	CAR Status	Evidence Deadline	Follow-up 1	Follow-up 2	Follow-up 3	Yoko-ten Schedule  มันขึ้น Underfinded
+####################################
+14-May-26
+//1.ทำตาราง คอลัมน์ที่1 Finding มีแถวดังนี้ 1) nc1 (Major NC), 2) nc2 (Minor NC) HMM, 3) nc2 (Minor NC) LPB, 4) OFI HMM, 5) OFI LPB, 6) Comment HMM, 7) Comment LPB
+        คอลัมน์ที่2 Number of finding โชว์จำนวนของแต่ละอันที่เจอ คอลัมน์ที่3 เป็นsubmission DeadLine มีย่อย2คอลัมน์ คือ 1)CAR 2)Evidence แสดงวันเวลาตามที่กรอก อยากได้ตารางนี้ด้านล่าง Finding Status
+//2.เพิ่มค้นหาคำแยกหมวดได้เป็นDropdown เช่นเวลาค้นหาHMMจะขึ้นแค่ของHMM หมายถึงว่าถ้าหาHMM ตารางAudit Historyจะโชว์แต่Dataของ Plant HMM
+3.การopen/close ให้คนที่มีเมลตรงกับฐานที่มีแก้ได้เฉพาะในสิ่งที่เป็นของตัวเอง สามารถ edit/deleteข้อมูลได้ถ้ายังไม่close ผมเข้าใจถูกไหม?
+//4.เพิ่ม % ในวงกลม Finding Status ให้ครบทุกตัวสิ openกี่% closeกี่% Overdueกี่%
+//5.เปลี่ยนเดือนจากตัวเลขไปเป็นอักษรภาษาอังกฤษ เอาอันนี้ก่อน
+######################################
+15-May-26
+//1.
+//1.1FindingsในตารางของAudit Historyให้ใส่ได้1อันเพื่อเป็นkeyในการหา
+//1.2เพิ่ม Findings item ข้างกรอบที่แยกplant โดยFindings itemสามารถใส่ได้หลายkey wordเพื่อหา1) nc1 (Major NC) 2) nc2 (Minor NC) HMM 3) nc2 (Minor NC) LPB 4) OFI HMM 5) OFI LPB 6) Comment HMM 7) Comment LPB
+//เช่น จะหาdata plantของ Lopburi => เจาะลึก Finding > nc1 (Major NC), OFI HMM =>ในตาราง Data จะโชว์แค่ที่เลือมากตามนี้
+2.เพิ่มกรอบ Audit Report TUV สามารถเพิ่มไฟล์ได้หลายไฟล์เขียนDetailได้ไม่เกี่ยวกับหน้า Audit History เป็นเหมือนreportเพิ่มเติม ทำหน้าที่เหมือน word DOC ผมจะนำเข้าpugin TinyMCE วางไฟล์และเปิดไฟล์ที่เป็นลิงก์ได้ กรอบวางไว้ใต้ ตารางFinding Summary
+3.เปลี่ยนแปลงครั้งใหญ่ ในการส่งแต่ละครั้งจะแยกเป็นปีๆ ตอนนี้มันทำได้ปีเดียว อยากแยกหาแต่ละปีได้ เพิ่ม ลบ ปีอื่นๆได้ และเมลคนทำสามารถแก้งานตัวเองได้ แต่แก้งานคนอื่นไม่ได้ Admin สามารถแก้ได้และสามารถopen/closeได้เมื่อเกินกำหนด
+3.1.เปลี่ยน static -> Dynamic จากไฟล์เดิมที่ให้จะเห็นว่ามันเป็นstaticตายตัวแต่อยากให้มันยืดหยุ่นคือจะทำการเพิ่มปีอื่นๆ โดยเพิ่มแยกsheet(แยกData base)กัน สามารถลบได้จากหน้าเว้บ และ เช่นเพิ่มปีอื่นๆ รูปแบบหน้าตาการโชว์ข้อมูลเป็นแบบนี้แต่ข้อมูลจะเป็นปีนั้นๆแทน
+#####################################
+19-May-2026
+1.สร้างสถานะ overdue
+2.สามารถส่งเมลไปหา CAR IN charge เมื่อ overdue แล้ว
+3.Admin สามารถลบdataได้เพียงคนเดียว
+4.เพิ่มชื่อจริงของCAR IN chargeได้
+5.สร้างกราฟว่า คนชื่อคนใน CAR IN charge ใครเหลือค้างเท่าไหร่ คนที่ค้างเยอะกราฟยิ่งสูง
+lb04506
+Apr202600
